@@ -22,13 +22,18 @@ export default function Checklist() {
   const [openCats, setOpenCats] = useState<Record<string, boolean>>(
     Object.fromEntries(categories.map(c => [c.id, true]))
   )
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     // Load current state
     supabase
       .from('checklist_items')
       .select('item_id, checked')
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          setError(`Load failed: ${error.message}`)
+          return
+        }
         if (!data) return
         const state: Record<number, boolean> = {}
         data.forEach((row: { item_id: number; checked: boolean }) => {
@@ -56,10 +61,15 @@ export default function Checklist() {
   const handleToggle = async (itemId: number) => {
     const next = !checked[itemId]
     setChecked(prev => ({ ...prev, [itemId]: next }))
-    await supabase
+    const { error } = await supabase
       .from('checklist_items')
       .update({ checked: next, updated_at: new Date().toISOString() })
       .eq('item_id', itemId)
+    if (error) {
+      // Roll back optimistic update
+      setChecked(prev => ({ ...prev, [itemId]: !next }))
+      setError(`Save failed: ${error.message}`)
+    }
   }
 
   const toggleCat = (id: string) =>
@@ -70,6 +80,11 @@ export default function Checklist() {
 
   return (
     <>
+      {error && (
+        <div style={{ background: '#fee2e2', color: '#991b1b', padding: '12px 16px', fontSize: 13, fontWeight: 700, textAlign: 'center' }}>
+          ⚠️ {error}
+        </div>
+      )}
       <div className={styles.header}>
         <div className={styles.headerEmoji}>👶🌸</div>
         <h1>Baby Girl Checklist</h1>
